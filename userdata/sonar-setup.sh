@@ -90,6 +90,8 @@ EOT
 
 systemctl daemon-reload
 systemctl enable sonarqube
+systemctl start sonarqube
+
 
 # Install and configure nginx
 yum install -y nginx
