@@ -1,6 +1,4 @@
-FROM tomcat:10.1-jdk21
-
-RUN apt update && apt install -y net-tools
+FROM 221082191413.dkr.ecr.us-east-1.amazonaws.com/custom-baseimage:v1
 
 COPY target/vprofile-v2.war webapps/vprofile-v2.war
 
