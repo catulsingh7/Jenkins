@@ -1,122 +1,99 @@
 pipeline {
-    
-	agent any
-	
-	tools {
-	jdk "JDK17"	
-        maven "MAVEN3.9"
+    agent any
+    tools {
+        maven "maven3.9"
     }
-	
-    environment {
-        NEXUS_VERSION = "nexus3"
-        NEXUS_PROTOCOL = "http"
-        NEXUS_URL = "172.31.40.209:8081"
-        NEXUS_REPOSITORY = "vprofile-release"
-	NEXUS_REPO_ID    = "vprofile-release"
-        NEXUS_CREDENTIAL_ID = "nexuslogin"
-        ARTVERSION = "${env.BUILD_ID}"
-    }
-	
-    stages{
-        
-        stage('BUILD'){
-            steps {
-                sh 'mvn clean install -DskipTests'
-            }
-            post {
-                success {
-                    echo 'Now Archiving...'
-                    archiveArtifacts artifacts: '**/target/*.war'
-                }
-            }
-        }
 
-	stage('UNIT TEST'){
+    environment {
+        IMAGE_REPOSITORY = "221082191413.dkr.ecr.us-east-1.amazonaws.com"
+        IMAGE_NAME = "devopscheetah"
+        DEPLOYMENT_NAME = "frontend"
+        CLUSTER_NAME = "EKS-Cluster"
+        GIT_REPO_NAME = "Jenkins"
+        REGION = "us-east-1"
+    }
+
+    stages {
+        stage ('fetch code'){
+            steps {
+                git branch: 'atom', url: 'https://github.com/catulsingh7/Jenkins.git'
+            }
+
+        }
+        stage('unit test') {
             steps {
                 sh 'mvn test'
             }
         }
-
-	stage('INTEGRATION TEST'){
+        stage('build') {
             steps {
-                sh 'mvn verify -DskipUnitTests'
+                sh 'mvn install -DskipTests'
+            }
+
+            post {
+                success {
+                    echo "Now archiving the code"
+                    archiveArtifacts artifacts: '**/target/*.war'
+                }
             }
         }
-		
-        stage ('CODE ANALYSIS WITH CHECKSTYLE'){
+        stage ('checkstyle anaylsis') {
             steps {
                 sh 'mvn checkstyle:checkstyle'
             }
-            post {
-                success {
-                    echo 'Generated Analysis Result'
-                }
-            }
         }
-
-        stage('CODE ANALYSIS with SONARQUBE') {
-          
-		  environment {
-             scannerHome = tool 'sonarscanner4'
-          }
-
-          steps {
-            withSonarQubeEnv('sonar-pro') {
-               sh '''${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=vprofile \
-                   -Dsonar.projectName=vprofile-repo \
-                   -Dsonar.projectVersion=1.0 \
-                   -Dsonar.sources=src/ \
-                   -Dsonar.java.binaries=target/test-classes/com/visualpathit/account/controllerTest/ \
-                   -Dsonar.junit.reportsPath=target/surefire-reports/ \
-                   -Dsonar.jacoco.reportsPath=target/jacoco.exec \
-                   -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml'''
-            }
-
-            timeout(time: 10, unit: 'MINUTES') {
-               waitForQualityGate abortPipeline: true
-            }
-          }
-        }
-
-        stage("Publish to Nexus Repository Manager") {
+         
+        
+        stage("Upload artifacts") {
             steps {
-                script {
-                    pom = readMavenPom file: "pom.xml";
-                    filesByGlob = findFiles(glob: "target/*.${pom.packaging}");
-                    echo "${filesByGlob[0].name} ${filesByGlob[0].path} ${filesByGlob[0].directory} ${filesByGlob[0].length} ${filesByGlob[0].lastModified}"
-                    artifactPath = filesByGlob[0].path;
-                    artifactExists = fileExists artifactPath;
-                    if(artifactExists) {
-                        echo "*** File: ${artifactPath}, group: ${pom.groupId}, packaging: ${pom.packaging}, version ${pom.version} ARTVERSION";
                         nexusArtifactUploader(
-                            nexusVersion: NEXUS_VERSION,
-                            protocol: NEXUS_PROTOCOL,
-                            nexusUrl: NEXUS_URL,
-                            groupId: pom.groupId,
-                            version: ARTVERSION,
-                            repository: NEXUS_REPOSITORY,
-                            credentialsId: NEXUS_CREDENTIAL_ID,
+                            nexusVersion: 'nexus3',
+                            protocol: 'http',
+                            nexusUrl: '54.198.223.73:8081',
+                            groupId: 'dev',
+                            version: "${env.BUILD_ID}",
+                            repository: 'test-repo',
+                            credentialsId: 'nexus_credentials',
                             artifacts: [
-                                [artifactId: pom.artifactId,
+                                [artifactId: 'devopscheetah',
                                 classifier: '',
-                                file: artifactPath,
-                                type: pom.packaging],
-                                [artifactId: pom.artifactId,
-                                classifier: '',
-                                file: "pom.xml",
-                                type: "pom"]
+                                file: 'target/vprofile-v2.war',
+                                type: 'war'],
                             ]
                         );
-                    } 
-		    else {
-                        error "*** File: ${artifactPath}, could not be found";
-                    }
+                 }
+            }
+
+        stage ("AWS Login") {
+            steps {
+                script {
+                    sh 'aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin ${IMAGE_REPOSITORY}'
+                    sh 'aws eks update-kubeconfig --region ${REGION} --name ${CLUSTER_NAME}'
                 }
             }
         }
+
+        stage ("Build Docker Image") {
+            steps {
+                script {
+                sh 'docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} -f Dockerfile .'
+                sh 'docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_REPOSITORY}/${IMAGE_NAME}:v${BUILD_NUMBER}'
+            }
+            }
+        }
+
+        stage ("Push Docker Image to ECR") {
+            steps {
+                sh 'docker push ${IMAGE_REPOSITORY}/${IMAGE_NAME}:v${BUILD_NUMBER}'
+            }
+        }
+
+        stage ("Deploy Image to EKS") {
+                steps {
+                    sh "kubectl set image deployment/${DEPLOYMENT_NAME} ${DEPLOYMENT_NAME}=${IMAGE_REPOSITORY}/${IMAGE_NAME}:v-${BUILD_NUMBER} -n java-app"
+                }
+            }
 
 
     }
-
-
 }
