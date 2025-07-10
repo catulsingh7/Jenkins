@@ -38,7 +38,7 @@ pipeline {
 
         stage ("Push Docker Image to ECR") {
             steps {
-                sh 'docker push ${IMAGE_REPOSITORY}/${IMAGE_NAME}:v-${BUILD_NUMBER}'
+                sh 'docker push ${IMAGE_REPOSITORY}/${IMAGE_NAME}:v${BUILD_NUMBER}'
             }
         }
 
