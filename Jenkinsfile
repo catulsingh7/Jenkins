@@ -104,25 +104,24 @@ pipeline {
             steps {
                 script {
                 sh 'docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} -f Dockerfile .'
-                sh 'docker tag ${IMAGE_NAME}:${BUILD_NUMBER} 221082191413.dkr.ecr.us-east-1.amazonaws.com/devopscheetah:v-${BUILD_NUMBER}'
+                sh 'docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_REPOSITORY}/${IMAGE_NAME}:v${BUILD_NUMBER}'
             }
             }
         }
 
         stage ("Push Docker Image to ECR") {
             steps {
-                sh 'docker push ${IMAGE_REPOSITORY}/${IMAGE_NAME}:v-${BUILD_NUMBER}'
+                sh 'docker push ${IMAGE_REPOSITORY}/${IMAGE_NAME}:v${BUILD_NUMBER}'
             }
         }
 
 
         stage ("Deploy Image to EKS") {
                 steps {
-                    sh "kubectl set image deployment/${DEPLOYMENT_NAME} ${DEPLOYMENT_NAME}=${IMAGE_REPOSITORY}/${IMAGE_NAME}:v-${BUILD_NUMBER} -n devopscheetah"
+                    sh "kubectl set image deployment/${DEPLOYMENT_NAME} ${DEPLOYMENT_NAME}=${IMAGE_REPOSITORY}/${IMAGE_NAME}:v${BUILD_NUMBER} -n devopscheetah"
                 }
             }
     }
 }
-
 
 
