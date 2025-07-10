@@ -1,0 +1,46 @@
+pipeline {
+    agent any
+    tools {
+        maven "maven3.9"
+    }
+
+    environment {
+        IMAGE_REPOSITORY = "221082191413.dkr.ecr.us-east-1.amazonaws.com"
+        IMAGE_NAME = "custom-baseimage"
+        GIT_REPO_NAME = "Jenkins"
+        REGION = "us-east-1"
+    }
+
+    stages {
+        stage ('fetch code'){
+            steps {
+                git branch: 'atom', url: 'https://github.com/catulsingh7/Jenkins.git'
+            }
+
+        }
+        
+        stage ("AWS Login") {
+            steps {
+                script {
+                    sh 'aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin ${IMAGE_REPOSITORY}'
+                }
+            }
+        }
+
+        stage ("Build Docker Image") {
+            steps {
+                script {
+                sh 'docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} -f eDocker-baseimage .'
+                sh 'docker tag ${IMAGE_NAME}:${BUILD_NUMBER} ${IMAGE_REPOSITORY}/${IMAGE_NAME}:v${BUILD_NUMBER}'
+            }
+            }
+        }
+
+        stage ("Push Docker Image to ECR") {
+            steps {
+                sh 'docker push ${IMAGE_REPOSITORY}/${IMAGE_NAME}:v-${BUILD_NUMBER}'
+            }
+        }
+
+    }
+}
